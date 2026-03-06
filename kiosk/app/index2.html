@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>PrintGo</title>
+    <style>
+      body {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        height: 100vh;
+        font-family: Arial, sans-serif;
+        margin: 0;
+        padding: 20px;
+        background: #f9f9f9;
+        overflow: hidden;
+      }
+
+      /* Left info box */
+      .info-box {
+        flex: 1;
+        max-width: 300px;
+        background: #fff;
+        padding: 20px;
+        border-radius: 12px;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+      }
+      .info-box h2 {
+        margin-top: 0;
+        color: #333;
+      }
+      .info-box ul {
+        padding-left: 20px;
+      }
+
+      /* Center QR + status */
+      .center-box {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+      }
+      #qr {
+        margin-top: 20px;
+        border: 2px solid black;
+        padding: 20px;
+      }
+
+      /* Right ads section */
+      .ads-box {
+        flex: 1;
+        max-width: 300px;
+        background: #fff;
+        padding: 20px;
+        border-radius: 12px;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        text-align: center;
+      }
+      .ads-box h2 {
+        margin-top: 0;
+        color: #333;
+      }
+      .ad-placeholder {
+        width: 100%;
+        height: 200px;
+        background: #ddd;
+        margin: 10px 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 8px;
+        font-weight: bold;
+        color: #555;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Left Info Section -->
+    <!-- <div class="info-box">
+      <h2>User Guide</h2>
+      <ul>
+        <li>Scan the QR code in the center.</li>
+        <li>Upload your documents online.</li>
+        <li>Select print preferences.</li>
+        <li>Pay securely.</li>
+        <li>Collect your prints instantly!</li>
+      </ul>
+    </div> -->
+
+    <!-- Center QR Section -->
+    <div class="center-box">
+      <center>
+        <p id="kioskID">URL</p>
+        <button id="resetButton">RESET</button>
+        <br>
+        <canvas id="qr">[QR Code Here]</canvas>
+        <img height="300" id="imagetoshow" src="" alt="" />
+        <h1 id="status">Loading...</h1>
+      </center>
+    </div>
+
+    <!-- Right Ads Section -->
+    <!-- <div class="ads-box">
+      <h2>Sponsored Ads</h2>
+      <div class="ad-placeholder">Ad Space 1</div>
+      <div class="ad-placeholder">Ad Space 2</div>
+    </div> -->
+
+    <script defer src="renderer.js"></script>
+  </body>
+</html>

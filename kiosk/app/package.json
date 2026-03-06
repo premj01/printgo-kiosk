@@ -1,0 +1,22 @@
+{
+  "name": "app",
+  "version": "1.0.0",
+  "description": "KIOSK for something big ... making printing more efficient ",
+  "main": "src/main/main.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "electron .",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Prem Jadhav",
+  "license": "ISC",
+  "devDependencies": {
+    "electron": "^38.2.2"
+  },
+  "dependencies": {
+    "pdf-to-printer": "^5.6.1",
+    "qrcode": "^1.5.4",
+    "socket.io-client": "^4.8.1",
+    "ws": "^8.18.3"
+  }
+}
