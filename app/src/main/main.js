@@ -5,7 +5,7 @@ const { registerIpcHandlers } = require("./ipc-handlers");
 
 app.whenReady().then(() => {
     createWindow();
-    connectSocket();
+    connectSocket();   // user-level: QR, file transfer, printing
     registerIpcHandlers();
 });
 

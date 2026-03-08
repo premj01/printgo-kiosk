@@ -1,5 +1,6 @@
 const WebSocket = require("ws");
 const fs = require("fs");
+const path = require("path");
 const kioskNativeResources = require('../../../resources.json');
 const { RECONNECT_DELAY } = require("../config/constants");
 const { safeSend } = require("./window");
@@ -7,6 +8,33 @@ const { safeSend } = require("./window");
 let socket = null;
 let UniqueKisokIDForIndividual = "";
 let printDetails = null;
+const UPLOAD_DIR = path.resolve(process.cwd(), "uploads");
+let hasWarnedChunkWithoutMetadata = false;
+
+function resumeSocketIfPaused() {
+    if (socket && socket.isPaused) {
+        socket.resume();
+    }
+}
+
+function handleNonJsonMessage(rawMessage) {
+    const message = (rawMessage || "").trim();
+
+    if (!message) {
+        return;
+    }
+
+    // Some backends may emit kiosk id / heartbeat text frames.
+    if (
+        message === kioskNativeResources.kioksid ||
+        message.toLowerCase() === "ping" ||
+        message.toLowerCase() === "pong"
+    ) {
+        return;
+    }
+
+    console.log("Unknown plain message:", message);
+}
 
 function connectSocket() {
 
@@ -22,61 +50,81 @@ function connectSocket() {
         safeSend('status', { text: "Connected to server" });
     });
 
-    socket.on("message", (msg) => {
+    socket.on("message", (msg, isBinary) => {
 
-        // HANDLE BINARY FILE DATA 
-        if (Buffer.isBuffer(msg)) {
+        // HANDLE FILE CHUNKS
+        if (isBinary) {
 
-            if (!printDetails?.stream) {
-                console.log("Received chunk without metadata");
+            if (!printDetails || !printDetails.stream) {
+                if (!hasWarnedChunkWithoutMetadata) {
+                    console.log("Received chunk without metadata");
+                    hasWarnedChunkWithoutMetadata = true;
+                }
                 return;
             }
+
+            hasWarnedChunkWithoutMetadata = false;
 
             const transfer = printDetails;
 
             const ok = transfer.stream.write(msg);
 
-            if (!ok) socket.pause();
+            if (!ok) {
+                socket.pause();
+            }
 
             transfer.received++;
 
             if (transfer.received >= transfer.totalChunks) {
+                printDetails = null;
 
-                transfer.stream.end();
+                transfer.stream.end(() => {
+                    resumeSocketIfPaused();
 
-                console.log("File saved:", transfer.fileName);
+                    console.log("File saved:", transfer.fileName);
 
-                socket.send(JSON.stringify({
-                    type: "ack-after-file-sent",
-                    data: {
+                    sendEvent("ack-after-file-sent", {
                         kioskId: kioskNativeResources.kioksid,
                         sessionId: transfer.sessionId
-                    }
-                }));
-
-                printDetails = null;
+                    });
+                });
             }
 
             return;
         }
 
-        //  HANDLE JSON CONTROL MESSAGES 
+        // HANDLE JSON MESSAGES
         let parsed;
+        const rawMessage = msg.toString();
 
         try {
-            parsed = JSON.parse(msg.toString());
+            parsed = JSON.parse(rawMessage);
         } catch {
-            console.log("Invalid message");
+            handleNonJsonMessage(rawMessage);
+            return;
+        }
+
+        if (typeof parsed === "string") {
+            handleNonJsonMessage(parsed);
+            return;
+        }
+
+        if (!parsed || typeof parsed !== "object") {
+            console.log("Invalid message payload");
             return;
         }
 
         const { type, data } = parsed;
 
+        if (type === kioskNativeResources.kioksid) {
+            return;
+        }
+
         switch (type) {
 
             case "setting-reference-id-for-user-identification":
 
-                UniqueKisokIDForIndividual = data.referenceId;
+                UniqueKisokIDForIndividual = data.userSessionUUID;
 
                 safeSend('status', {
                     serverStatus: data.serverStatus,
@@ -93,6 +141,8 @@ function connectSocket() {
                     userUniqueReferenceId: UniqueKisokIDForIndividual,
                     kioskStatus: true
                 });
+                console.log("User session id setuped .. ready to continue : " + UniqueKisokIDForIndividual);
+
 
                 break;
 
@@ -115,41 +165,90 @@ function connectSocket() {
                     UniqueKisokIDForIndividual === data.sessionId
                 ) {
 
+                    if (printDetails?.stream) {
+                        printDetails.stream.destroy();
+                        printDetails = null;
+                    }
+
+                    resumeSocketIfPaused();
+
+                    fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+                    const defaultFileName = path.basename(data.fileName);
+                    const targetPath = path.join(UPLOAD_DIR, defaultFileName);
+
                     printDetails = {
+
                         userName: data.userName,
-                        fileName: data.fileName,
+                        fileName: defaultFileName,
                         sessionId: data.sessionId,
                         totalChunks: data.totalChunks,
                         received: 0,
-                        stream: fs.createWriteStream(`./received_${data.fileName}`)
+
+                        // Use write mode so existing files are replaced automatically.
+                        stream: fs.createWriteStream(targetPath, { flags: "w" })
                     };
+
+                    // resume socket when stream drained
+                    printDetails.stream.on("drain", () => {
+                        resumeSocketIfPaused();
+                    });
+
+                    printDetails.stream.on("error", (err) => {
+                        console.error("File stream error:", err.message);
+                        printDetails = null;
+                        resumeSocketIfPaused();
+                    });
+
+                    printDetails.stream.on("close", () => {
+                        resumeSocketIfPaused();
+                    });
 
                     console.log("Metadata received:", data.fileName);
 
                 } else {
 
                     console.log("Metadata ignored");
+
                 }
 
                 break;
 
             case "ack-after-file-sent":
 
-                if (
-                    data.sessionId === UniqueKisokIDForIndividual &&
-                    data.kioskId === kioskNativeResources.kioksid
-                ) {
-
-                    socket.send(JSON.stringify({
-                        type: "ack-of-file-from-kiosk",
-                        data: {
-                            ack: true,
-                            sessionId: data.sessionId
-                        }
-                    }));
+                // Do not bind this ACK to current UI session id. A user can reset
+                // immediately after upload, but backend still expects transfer ACK.
+                if (data?.kioskId === kioskNativeResources.kioksid && data?.sessionId) {
+                    sendEvent("ack-of-file-from-kiosk", {
+                        ack: true,
+                        sessionId: data.sessionId
+                    });
                 }
 
                 break;
+
+            case "status-user-connected-to-kiosk":
+                safeSend('status', {
+                    text: data.msg
+                });
+
+                break;
+
+            case "print-file-request-from-user-via-server":
+
+
+
+                break;
+
+            case "printer-status-request-from-server":
+
+
+                break;
+
+            case "printer-get-list-request-from-server":
+
+                break;
+
+
 
             default:
                 console.log("Unknown message:", type);
@@ -158,21 +257,37 @@ function connectSocket() {
     });
 
     socket.on("close", () => {
+
         console.log("Disconnected from server");
+
         UniqueKisokIDForIndividual = "";
         socket = null;
+
         setTimeout(connectSocket, RECONNECT_DELAY);
     });
 
     socket.on("error", (err) => {
+
         console.error("Connection error:", err.message);
+
     });
+
 }
 
 function sendEvent(type, data) {
+
     if (socket?.readyState === WebSocket.OPEN) {
-        socket.send(JSON.stringify({ type, ...data }));
+
+        const payload = data ?? {};
+
+        socket.send(JSON.stringify({
+            type,
+            data: payload,
+            ...payload
+        }));
+
     }
+
 }
 
 function getUniqueKioskID() {

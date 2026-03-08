@@ -19,10 +19,22 @@ const resetUserIdKiosk = (from = "Unknown") => {
         safeSend("SetQRCode", { img: videoURLs.success }); // clear qrcode and set appropriate gif
         let oldId = getUniqueKioskID();
         setUniqueKioskID("");
-        sendEvent("reset-user-session-id-kiosk", {
-            msg: ` ${from} please reset id `,
-            oldId: oldId
-        });
+
+        setTimeout(() => {
+
+            sendEvent("reset-user-session-id-kiosk", {
+                msg: `${from} please reset id `,
+                oldId: oldId
+            });
+
+        }, 5000)
+
+        // // testing code .. no matters 
+        // sendEvent("testing-file-request-from-kiosk", {
+        //     msg: `file send request on button click`
+        // });
+
+
         // UI pn update kela 
     } catch (err) {
         console.log(err);

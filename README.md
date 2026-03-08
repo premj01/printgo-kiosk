@@ -38,6 +38,7 @@ Notes:
 - Keep the key name `kioksid` as-is because current code expects that exact property.
 - `SERVER_URL` should be host:port only (for example `localhost:3000`), not a full URL.
 - `AppURL` is used to generate the QR target URL shown in the kiosk app.
+- We definately need CUPS installed on the kiosk machine.
 
 ## Install
 
