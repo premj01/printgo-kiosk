@@ -5,7 +5,7 @@ const { videoURLs } = require("../config/constants");
 
 function registerIpcHandlers() {
     ipcMain.on("reset-user-session-id-kiosk-local", () => {
-        resetUserIdKiosk("kiosk button");
+        resetUserIdKiosk("from kiosk button");
     });
 }
 
