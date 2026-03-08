@@ -1,5 +1,10 @@
 {
-  "SERVER_URL": "ws://localhost:3000",
-  "kioskName": "Kiosk-4nu34592",
-  "kioksid": "KIOSergen-434fer"
+  "socketMethod": "ws",
+  "httpMethod": "http",
+  "SERVER_URL": "localhost:3000",
+  "AppURL": "localhost:5173",
+  "kioskName": "Kiosk-01",
+  "kioksid": "KIOSK001"
 }
+
+
