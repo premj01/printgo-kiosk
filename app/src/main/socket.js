@@ -4,12 +4,51 @@ const path = require("path");
 const kioskNativeResources = require('../../../resources.json');
 const { RECONNECT_DELAY } = require("../config/constants");
 const { safeSend } = require("./window");
+const {
+    printFile,
+    getPrinterStatus: fetchPrinterStatus,
+    getPrinterList: fetchPrinterList,
+    cancelPrinting,
+    resetPrinterSettings,
+    cleanUploads,
+    getJobQueue,
+    setDefaultPrinter,
+    testPrint,
+    getInkLevels,
+    pausePrinter,
+    resumePrinter,
+    getPrintHistory,
+} = require("./printer");
 
 let socket = null;
 let UniqueKisokIDForIndividual = "";
 let printDetails = null;
 const UPLOAD_DIR = path.resolve(process.cwd(), "uploads");
 let hasWarnedChunkWithoutMetadata = false;
+let printerInformation = {
+
+}
+
+function setPrinterInformation(info) {
+    printerInformation = info;
+}
+function setPrinterStatus(printerStatus) {
+    printerInformation.status = printerStatus;
+}
+function getPrinterStatus() {
+    return printerInformation.status;
+}
+function setPrinterList(printerList) {
+    printerInformation.printerList = printerList;
+}
+function getPrinterList() {
+    return printerInformation.printerList;
+}
+
+
+function getPrinterInformation() {
+    return printerInformation;
+}
 
 function resumeSocketIfPaused() {
     if (socket && socket.isPaused) {
@@ -233,22 +272,177 @@ function connectSocket() {
 
                 break;
 
-            case "print-file-request-from-user-via-server":
+            case "print-file-request-from-user-via-server": {
+                // Initiate printing with options from server (copies, printer, orientation, etc.)
+                const printOpts = {
+                    copies: data?.copies ?? 1,
+                    printer: data?.printer ?? null,
+                    orientation: data?.orientation ?? "portrait",
+                    paperSize: data?.paperSize ?? "A4",
+                    sides: data?.sides ?? "one-sided",
+                    pageRanges: data?.pageRanges ?? null,
+                    fitToPage: data?.fitToPage ?? true,
+                    colorMode: data?.colorMode ?? "monochrome",
+                };
 
+                const fileName = data?.fileName ?? null;
 
+                // Store current print request in printerInformation
+                setPrinterInformation({
+                    ...printerInformation,
+                    currentJob: { fileName, options: printOpts, startedAt: Date.now() },
+                });
+                setPrinterStatus("printing");
 
+                printFile(fileName, printOpts).then((result) => {
+                    setPrinterStatus(result.success ? "idle" : "error");
+
+                    if (result.success && result.jobId) {
+                        printerInformation.currentJob = {
+                            ...printerInformation.currentJob,
+                            jobId: result.jobId,
+                        };
+                    }
+
+                    sendEvent("print-file-response-to-server", {
+                        kioskId: kioskNativeResources.kioksid,
+                        sessionId: data?.sessionId,
+                        ...result,
+                    });
+
+                    // Cleanup uploaded file after printing
+                    cleanUploads();
+                });
                 break;
+            }
 
-            case "printer-status-request-from-server":
-
-
+            case "printer-status-request-from-server": {
+                fetchPrinterStatus().then((result) => {
+                    setPrinterStatus(result.status);
+                    sendEvent("printer-status-response-to-server", {
+                        kioskId: kioskNativeResources.kioksid,
+                        ...result,
+                    });
+                });
                 break;
+            }
 
-            case "printer-get-list-request-from-server":
-
+            case "printer-get-list-request-from-server": {
+                fetchPrinterList().then((result) => {
+                    setPrinterList(result.printers);
+                    sendEvent("printer-get-list-response-to-server", {
+                        kioskId: kioskNativeResources.kioksid,
+                        ...result,
+                    });
+                });
                 break;
+            }
 
+            case "cancle-printing-request-from-server": {
+                const jobId = printerInformation?.currentJob?.jobId ?? null;
+                const targetPrinter = data?.printer ?? null;
 
+                cancelPrinting(jobId, targetPrinter).then((result) => {
+                    if (result.success) {
+                        printerInformation.currentJob = null;
+                        setPrinterStatus("idle");
+                    }
+                    sendEvent("cancle-printing-response-to-server", {
+                        kioskId: kioskNativeResources.kioksid,
+                        ...result,
+                    });
+                    cleanUploads();
+                });
+                break;
+            }
+
+            case "reset-printer-settings-from-server": {
+                const targetPrinter = data?.printer ?? null;
+                resetPrinterSettings(targetPrinter).then((result) => {
+                    sendEvent("reset-printer-settings-response-to-server", {
+                        kioskId: kioskNativeResources.kioksid,
+                        ...result,
+                    });
+                });
+                break;
+            }
+
+            case "get-job-queue-request-from-server": {
+                getJobQueue().then((result) => {
+                    sendEvent("get-job-queue-response-to-server", {
+                        kioskId: kioskNativeResources.kioksid,
+                        ...result,
+                    });
+                });
+                break;
+            }
+
+            case "set-default-printer-request-from-server": {
+                if (data?.printerName) {
+                    setDefaultPrinter(data.printerName).then((result) => {
+                        sendEvent("set-default-printer-response-to-server", {
+                            kioskId: kioskNativeResources.kioksid,
+                            ...result,
+                        });
+                    });
+                }
+                break;
+            }
+
+            case "test-print-request-from-server": {
+                testPrint(data?.printer ?? null).then((result) => {
+                    sendEvent("test-print-response-to-server", {
+                        kioskId: kioskNativeResources.kioksid,
+                        ...result,
+                    });
+                });
+                break;
+            }
+
+            case "ink-levels-request-from-server": {
+                getInkLevels(data?.printer ?? null).then((result) => {
+                    sendEvent("ink-levels-response-to-server", {
+                        kioskId: kioskNativeResources.kioksid,
+                        ...result,
+                    });
+                });
+                break;
+            }
+
+            case "pause-printer-request-from-server": {
+                const targetPrinter = data?.printer ?? null;
+                const reason = data?.reason ?? "Paused by PrintGo Kiosk";
+                pausePrinter(targetPrinter, reason).then((result) => {
+                    if (result.success) setPrinterStatus("paused");
+                    sendEvent("pause-printer-response-to-server", {
+                        kioskId: kioskNativeResources.kioksid,
+                        ...result,
+                    });
+                });
+                break;
+            }
+
+            case "resume-printer-request-from-server": {
+                resumePrinter(data?.printer ?? null).then((result) => {
+                    if (result.success) setPrinterStatus("idle");
+                    sendEvent("resume-printer-response-to-server", {
+                        kioskId: kioskNativeResources.kioksid,
+                        ...result,
+                    });
+                });
+                break;
+            }
+
+            case "print-history-request-from-server": {
+                const limit = data?.limit ?? 50;
+                getPrintHistory(limit).then((result) => {
+                    sendEvent("print-history-response-to-server", {
+                        kioskId: kioskNativeResources.kioksid,
+                        ...result,
+                    });
+                });
+                break;
+            }
 
             default:
                 console.log("Unknown message:", type);

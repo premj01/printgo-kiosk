@@ -7,4 +7,5 @@ const videoURLs = {
     loading_cat: path.join(__dirname, "../assets/cat_wait_speaker.mp4")
 };
 
+
 module.exports = { RECONNECT_DELAY, videoURLs };
