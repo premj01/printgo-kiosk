@@ -35,23 +35,23 @@ echo "Verifying Node and NPM installations:"
 node -v
 npm -v
 
-# 6. Clone the repository and install npm packages
-echo "Setting up printgo-kiosk directory..."
-REPO_URL="https://github.com/premj01/printgo-kiosk.git"
+# 6. Use existing local repository and install npm packages
+echo "Using existing local printgo-kiosk directory..."
 APP_DIR="$HOME/printgo-kiosk"
 
 if [ ! -d "$APP_DIR" ]; then
-    git clone "$REPO_URL" "$APP_DIR"
-else
-    echo "printgo-kiosk directory already exists. Pulling latest changes..."
-    cd "$APP_DIR" && git pull
+    echo "Error: $APP_DIR not found. Place the repository there before running this script."
+    exit 1
 fi
 
-if [ -f "$APP_DIR/package.json" ]; then
-    echo "Installing npm dependencies..."
-    cd "$APP_DIR"
-    npm install
+if [ ! -f "$APP_DIR/package.json" ]; then
+    echo "Error: package.json not found in $APP_DIR"
+    exit 1
 fi
+
+echo "Installing npm dependencies..."
+cd "$APP_DIR"
+npm install
 
 # 6.1 Create resources.json if missing
 echo "Ensuring resources.json exists..."
