@@ -1,15 +1,23 @@
 {
   "name": "agent",
-  "version": "1.0.0",
-  "description": "",
+  "version": "2.0.0",
+  "description": "PrintGo Kiosk management agent — OS-level control via WebSocket",
   "main": "agent.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node agent.js",
+    "install:agent": "bash install.sh",
+    "bg:start": "bash start.sh",
+    "bg:stop": "bash stop.sh",
+    "bg:restart": "bash restart.sh",
+    "bg:logs": "bash logs.sh",
+    "bg:status": "bash status.sh",
+    "bg:uninstall": "bash uninstall.sh"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "node-pty": "^1.0.0",
     "ws": "^8.18.3"
   }
 }

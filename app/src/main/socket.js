@@ -19,6 +19,9 @@ const {
     resumePrinter,
     getPrintHistory,
 } = require("./printer");
+const { default: sleepUtil } = require("../util/sleep.util");
+const { THEME } = require("../themes/theme");
+const { resetUserIdKiosk } = require("./ipc-handlers");
 
 let socket = null;
 let UniqueKisokIDForIndividual = "";
@@ -89,7 +92,7 @@ function connectSocket() {
         safeSend('status', { text: "Connected to server" });
     });
 
-    socket.on("message", (msg, isBinary) => {
+    socket.on("message", async (msg, isBinary) => {
 
         // HANDLE FILE CHUNKS
         if (isBinary) {
@@ -153,6 +156,7 @@ function connectSocket() {
             return;
         }
 
+        // parced message
         const { type, data } = parsed;
 
         if (type === kioskNativeResources.kioksid) {
@@ -269,7 +273,27 @@ function connectSocket() {
                 safeSend('status', {
                     text: data.msg
                 });
+                safeSend("set-state", { color: THEME.dotActive, msg: "CONNECTED" })
+                safeSend("set-timeout-warning", { isActive: false, msg: "NA" })
 
+                break;
+
+            //session disconnected by user
+            case "user-disconnection-warning":
+                let msg = data.msg;
+                let isActive = data.isActive
+                let conwndown = Number(data.timeout_period)
+
+                safeSend("set-timeout-warning", { isActive, msg })
+                for (let i = conwndown; isActive && i > 0; i--) {
+                    console.log(i);
+                    safeSend("set-timeout-warning", { isActive, msg })
+                    await sleepUtil(1000);
+                }
+                break;
+            case "user-disconnected":
+                safeSend("set-state", { color: THEME.dotOffline, msg: "NOT CONNECTED" })
+                resetUserIdKiosk("Reset req : User disconnected");
                 break;
 
             case "print-file-request-from-user-via-server": {

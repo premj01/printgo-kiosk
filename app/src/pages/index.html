@@ -27,6 +27,66 @@
         grid-template-columns: 1fr 1.4fr 1fr;
         gap: 20px;
         align-items: stretch;
+        position: relative;
+      }
+
+      #timeout-warning {
+        font-family: Verdana, Geneva, Tahoma, sans-serif;
+        color: rgb(255, 255, 255);
+        display: flex;
+        justify-content: center;
+        flex-direction: column;
+        align-items: center;
+        position: fixed;
+        inset: 0;
+        background: rgba(255, 50, 50, 0.723);
+        backdrop-filter: blur(2px);
+        pointer-events: none;
+        z-index: 10;
+        display: none;
+      }
+      #flag-dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: #3fb86b;
+        box-shadow: 0 0 0 4px rgba(63, 184, 107, 0.2);
+        animation: activeDotPulse 1.6s ease-in-out infinite;
+      }
+
+      #color-flag-dot {
+        position: fixed;
+        top: 16px;
+        right: 20px;
+        padding: 8px 12px;
+        background: rgba(255, 255, 255, 0.88);
+        border: 1px solid rgba(52, 83, 114, 0.18);
+        border-radius: 999px;
+        backdrop-filter: blur(4px);
+        z-index: 13;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      #state {
+        color: #264057;
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.3px;
+        text-transform: uppercase;
+      }
+
+      @keyframes activeDotPulse {
+        0%,
+        100% {
+          transform: scale(1);
+          opacity: 1;
+        }
+        50% {
+          transform: scale(0.8);
+          opacity: 0.8;
+        }
       }
 
       /* --- glass cards --- */
@@ -59,6 +119,16 @@
         flex-direction: column;
         align-items: center;
         justify-content: center;
+        position: relative;
+      }
+
+      #upper-text {
+        top: 20px;
+        margin: 0;
+        font-size: 15px;
+        font-weight: 600;
+        color: #39516f;
+        z-index: 13;
       }
 
       #kioskID {
@@ -104,6 +174,7 @@
         margin-top: 16px;
         color: #333;
         animation: pulse 1.6s infinite;
+        z-index: 13;
       }
 
       @keyframes pulse {
@@ -143,11 +214,24 @@
         .container {
           grid-template-columns: 1fr;
         }
+
+        #color-flag-dot {
+          top: 10px;
+          right: 12px;
+          padding: 7px 10px;
+        }
       }
     </style>
   </head>
 
   <body>
+    <div id="timeout-warning">
+      <h1>WARNING</h1>
+      <h2 id="timeout-message">Status</h2>
+    </div>
+    <div id="color-flag-dot">
+      <span id="flag-dot"></span><span id="state">connected</span>
+    </div>
     <div class="container">
       <!-- LEFT -->
       <div class="card info-box">
@@ -159,13 +243,13 @@
           <li>Pay securely</li>
           <li>Collect your prints instantly</li>
         </ul>
+        <button id="resetButton">RESET</button>
       </div>
 
       <!-- CENTER -->
       <div class="card center-box">
-        <p id="kioskID">URL</p>
-
-        <button id="resetButton">RESET</button>
+        <!-- <p id="kioskID">URL</p> -->
+        <h2 id="upper-text">PrintGo Kiosk</h2>
 
         <canvas id="qr"></canvas>
 

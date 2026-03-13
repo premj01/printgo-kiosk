@@ -31,6 +31,38 @@ function run(cmd) {
     });
 }
 
+function escapeRegex(value) {
+    return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Detect whether a printer supports color by inspecting CUPS options.
+ * Falls back to null when capability cannot be determined.
+ */
+async function getPrinterColorCapability(printerName) {
+    try {
+        const raw = await run(`lpoptions -p '${printerName}' -l 2>/dev/null || echo ''`);
+        if (!raw) return null;
+
+        const lines = raw.split("\n").map((line) => line.trim()).filter(Boolean);
+        const colorLine = lines.find((line) => /^(ColorModel|ColorMode|PrintoutMode)\//i.test(line));
+        if (!colorLine) return null;
+
+        // CUPS marks default value with "*" and may include values like Color/Gray/Monochrome.
+        const valuesPart = colorLine.split(":").slice(1).join(":");
+        const tokens = valuesPart.split(/\s+/).map((token) => token.replace(/^\*/, "")).filter(Boolean);
+
+        const hasColor = tokens.some((token) => /(color|rgb|cmyk)/i.test(token));
+        const hasMono = tokens.some((token) => /(gray|grey|mono|black)/i.test(token));
+
+        if (hasColor) return true;
+        if (hasMono && !hasColor) return false;
+        return null;
+    } catch (_) {
+        return null;
+    }
+}
+
 /**
  * Find the single file sitting in the uploads directory.
  * Returns full path, or null if nothing is there.
@@ -229,11 +261,11 @@ async function getPrinterList() {
             }
         }
 
-        // Enrich with status
+        // Enrich with status and color capability
         try {
             const statusRaw = await run("lpstat -p 2>/dev/null || echo ''");
             for (const printer of printers) {
-                const re = new RegExp(`printer ${printer.name}\\s+(.+)`);
+                const re = new RegExp(`printer ${escapeRegex(printer.name)}\\s+(.+)`);
                 const sm = statusRaw.match(re);
                 if (sm) {
                     if (sm[1].includes("idle")) printer.status = "idle";
@@ -243,6 +275,10 @@ async function getPrinterList() {
                 } else {
                     printer.status = "unknown";
                 }
+
+                const supportsColor = await getPrinterColorCapability(printer.name);
+                printer.supportsColor = supportsColor;
+                printer.printMode = supportsColor === true ? "color" : supportsColor === false ? "monochrome" : "unknown";
             }
         } catch (_) { /* ignore enrichment errors */ }
 

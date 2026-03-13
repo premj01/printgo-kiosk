@@ -8,8 +8,8 @@ function createWindow() {
         title: "PrintGo : Easy Printing Solution..",
         width: 800,
         height: 600,
-        // kiosk: true,       // fullscreen kiosk mode
-        // frame: false,      // no window frame
+        kiosk: true,       // fullscreen kiosk mode
+        frame: false,      // no window frame
         // alwaysOnTop: true,
         autoHideMenuBar: true,
         webPreferences: {

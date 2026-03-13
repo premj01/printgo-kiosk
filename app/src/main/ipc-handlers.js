@@ -27,7 +27,7 @@ const resetUserIdKiosk = (from = "Unknown") => {
                 oldId: oldId
             });
 
-        }, 5000)
+        }, 3000)
 
         // // testing code .. no matters 
         // sendEvent("testing-file-request-from-kiosk", {
@@ -41,4 +41,4 @@ const resetUserIdKiosk = (from = "Unknown") => {
     }
 }
 
-module.exports = { registerIpcHandlers };
+module.exports = { registerIpcHandlers, resetUserIdKiosk };
