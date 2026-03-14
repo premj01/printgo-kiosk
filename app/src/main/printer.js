@@ -24,11 +24,28 @@ const DEFAULT_PRINT_OPTIONS = {
  */
 function run(cmd) {
     return new Promise((resolve, reject) => {
+        console.log(`[printer.run] executing: ${cmd}`);
         exec(cmd, (err, stdout, stderr) => {
-            if (err) return reject(new Error(stderr || err.message));
-            resolve(stdout.trim());
+            const trimmedStdout = stdout.trim();
+            const trimmedStderr = stderr.trim();
+
+            console.log("[printer.run] stdout:", trimmedStdout || "<empty>");
+            console.log("[printer.run] stderr:", trimmedStderr || "<empty>");
+
+            if (err) {
+                console.error("[printer.run] failed:", stderr || err.message);
+                return reject(new Error(stderr || err.message));
+            }
+
+            console.log("[printer.run] completed successfully");
+            resolve(trimmedStdout);
         });
     });
+}
+
+function logReturn(scope, payload) {
+    console.log(`[${scope}] returning:`, payload);
+    return payload;
 }
 
 function escapeRegex(value) {
@@ -116,7 +133,7 @@ async function printFile(fileName, options = {}) {
         const msg = "No file name provided by server";
         console.error(msg);
         safeSend("status", { text: msg });
-        return { success: false, jobId: null, error: msg };
+        return logReturn("printFile", { success: false, jobId: null, error: msg });
     }
 
     // Resolve to uploads directory — only use the basename to prevent path traversal
@@ -127,7 +144,7 @@ async function printFile(fileName, options = {}) {
         const msg = `File not found: ${safeName}`;
         console.error(msg);
         safeSend("status", { text: msg });
-        return { success: false, jobId: null, error: msg };
+        return logReturn("printFile", { success: false, jobId: null, error: msg });
     }
 
     // Merge with defaults
@@ -198,11 +215,11 @@ async function printFile(fileName, options = {}) {
         console.log("Printed successfully!", stdout);
         safeSend("status", { text: "Printed Successfully 🎉" });
 
-        return { success: true, jobId, error: null };
+        return logReturn("printFile", { success: true, jobId, error: null });
     } catch (err) {
         console.error("Error printing:", err.message);
         safeSend("status", { text: `Printing Failed<br>${err.message}` });
-        return { success: false, jobId: null, error: err.message };
+        return logReturn("printFile", { success: false, jobId: null, error: err.message });
     }
 }
 
@@ -223,10 +240,10 @@ async function getPrinterStatus() {
         else if (raw.includes("disabled")) status = "disabled";
         else if (raw.includes("No printers found") || raw.includes("No destinations")) status = "no-printer";
 
-        return { status, raw, error: null };
+        return logReturn("getPrinterStatus", { status, raw, error: null });
     } catch (err) {
         console.error("getPrinterStatus error:", err.message);
-        return { status: "error", raw: "", error: err.message };
+        return logReturn("getPrinterStatus", { status: "error", raw: "", error: err.message });
     }
 }
 
@@ -282,10 +299,10 @@ async function getPrinterList() {
             }
         } catch (_) { /* ignore enrichment errors */ }
 
-        return { printers, error: null };
+        return logReturn("getPrinterList", { printers, error: null });
     } catch (err) {
         console.error("getPrinterList error:", err.message);
-        return { printers: [], error: err.message };
+        return logReturn("getPrinterList", { printers: [], error: err.message });
     }
 }
 
@@ -311,10 +328,10 @@ async function cancelPrinting(jobId = null, printer = null) {
         await run(cmd);
         console.log("Print job cancelled");
         safeSend("status", { text: "Printing cancelled" });
-        return { success: true, error: null };
+        return logReturn("cancelPrinting", { success: true, error: null });
     } catch (err) {
         console.error("cancelPrinting error:", err.message);
-        return { success: false, error: err.message };
+        return logReturn("cancelPrinting", { success: false, error: err.message });
     }
 }
 
@@ -328,7 +345,7 @@ async function resetPrinterSettings(printer = null) {
     try {
         const dest = printer || (await getDefaultPrinterName());
         if (!dest) {
-            return { success: false, error: "No printer found to reset" };
+            return logReturn("resetPrinterSettings", { success: false, error: "No printer found to reset" });
         }
 
         // lpoptions -p <printer> -l lists current options
@@ -338,10 +355,10 @@ async function resetPrinterSettings(printer = null) {
 
         console.log(`Printer settings reset for ${dest}`);
         safeSend("status", { text: `Printer settings reset (${dest})` });
-        return { success: true, error: null };
+        return logReturn("resetPrinterSettings", { success: true, error: null });
     } catch (err) {
         console.error("resetPrinterSettings error:", err.message);
-        return { success: false, error: err.message };
+        return logReturn("resetPrinterSettings", { success: false, error: err.message });
     }
 }
 
@@ -352,9 +369,9 @@ async function getDefaultPrinterName() {
     try {
         const raw = await run("lpstat -d 2>/dev/null");
         const match = raw.match(/system default destination:\s*(\S+)/);
-        return match ? match[1] : null;
+        return logReturn("getDefaultPrinterName", match ? match[1] : null);
     } catch {
-        return null;
+        return logReturn("getDefaultPrinterName", null);
     }
 }
 
@@ -379,9 +396,9 @@ async function getJobQueue() {
                 });
             }
         }
-        return { jobs, error: null };
+        return logReturn("getJobQueue", { jobs, error: null });
     } catch (err) {
-        return { jobs: [], error: err.message };
+        return logReturn("getJobQueue", { jobs: [], error: err.message });
     }
 }
 
@@ -395,9 +412,9 @@ async function setDefaultPrinter(printerName) {
     try {
         await run(`lpoptions -d '${printerName}'`);
         console.log(`Default printer set to ${printerName}`);
-        return { success: true, error: null };
+        return logReturn("setDefaultPrinter", { success: true, error: null });
     } catch (err) {
-        return { success: false, error: err.message };
+        return logReturn("setDefaultPrinter", { success: false, error: err.message });
     }
 }
 
@@ -455,11 +472,11 @@ async function testPrint(printer = null) {
 
         console.log("Test page sent:", stdout);
         safeSend("status", { text: "Test page printed 🎉" });
-        return { success: true, jobId, error: null };
+        return logReturn("testPrint", { success: true, jobId, error: null });
     } catch (err) {
         console.error("testPrint error:", err.message);
         safeSend("status", { text: `Test print failed<br>${err.message}` });
-        return { success: false, jobId: null, error: err.message };
+        return logReturn("testPrint", { success: false, jobId: null, error: err.message });
     }
 }
 
@@ -554,15 +571,15 @@ print(json.dumps({'names':names,'levels':levels,'types':types,'colors':colors}))
             }
         } catch (_) { /* ignore enrichment errors */ }
 
-        return {
+        return logReturn("getInkLevels", {
             levels,
             supported: levels.some(l => l.level >= 0),
             raw,
             error: null,
-        };
+        });
     } catch (err) {
         console.error("getInkLevels error:", err.message);
-        return { levels: [], supported: false, raw: "", error: err.message };
+        return logReturn("getInkLevels", { levels: [], supported: false, raw: "", error: err.message });
     }
 }
 
@@ -577,16 +594,16 @@ async function pausePrinter(printer = null, reason = "Paused by PrintGo Kiosk") 
     try {
         const dest = printer || (await getDefaultPrinterName());
         if (!dest) {
-            return { success: false, error: "No printer found to pause" };
+            return logReturn("pausePrinter", { success: false, error: "No printer found to pause" });
         }
 
         await run(`cupsdisable -r '${reason}' '${dest}'`);
         console.log(`Printer paused: ${dest}`);
         safeSend("status", { text: `Printer paused (${dest})` });
-        return { success: true, error: null };
+        return logReturn("pausePrinter", { success: true, error: null });
     } catch (err) {
         console.error("pausePrinter error:", err.message);
-        return { success: false, error: err.message };
+        return logReturn("pausePrinter", { success: false, error: err.message });
     }
 }
 
@@ -600,16 +617,16 @@ async function resumePrinter(printer = null) {
     try {
         const dest = printer || (await getDefaultPrinterName());
         if (!dest) {
-            return { success: false, error: "No printer found to resume" };
+            return logReturn("resumePrinter", { success: false, error: "No printer found to resume" });
         }
 
         await run(`cupsenable '${dest}'`);
         console.log(`Printer resumed: ${dest}`);
         safeSend("status", { text: `Printer resumed (${dest})` });
-        return { success: true, error: null };
+        return logReturn("resumePrinter", { success: true, error: null });
     } catch (err) {
         console.error("resumePrinter error:", err.message);
-        return { success: false, error: err.message };
+        return logReturn("resumePrinter", { success: false, error: err.message });
     }
 }
 
@@ -653,9 +670,9 @@ async function getPrintHistory(limit = 50) {
                         });
                     }
                 }
-                return { history: history.slice(-limit), error: null };
+                return logReturn("getPrintHistory", { history: history.slice(-limit), error: null });
             } catch (_) {
-                return { history: [], error: "No print history available (logs not accessible)" };
+                return logReturn("getPrintHistory", { history: [], error: "No print history available (logs not accessible)" });
             }
         }
 
@@ -683,10 +700,10 @@ async function getPrintHistory(limit = 50) {
             }
         }
 
-        return { history: history.slice(-limit), error: null };
+        return logReturn("getPrintHistory", { history: history.slice(-limit), error: null });
     } catch (err) {
         console.error("getPrintHistory error:", err.message);
-        return { history: [], error: err.message };
+        return logReturn("getPrintHistory", { history: [], error: err.message });
     }
 }
 

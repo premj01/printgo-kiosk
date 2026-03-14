@@ -1,4 +1,4 @@
-export const THEME = {
+const THEME = {
     // body
     bodyBg: "linear-gradient(135deg, #e9f0ff, #fef6ff)",
 
@@ -18,3 +18,5 @@ export const THEME = {
     timeoutBg: "rgba(255, 50, 50, 0.723)",
     timeoutText: "rgb(255, 255, 255)",
 };
+
+module.exports = { THEME };

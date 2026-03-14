@@ -41,6 +41,7 @@ const ptySessions = {};
 /** Send a typed JSON message only if the socket is open. */
 function send(ws, type, data) {
   if (ws.readyState === WebSocket.OPEN) {
+    console.log(`[agent.send] ${type}:`, data);
     ws.send(JSON.stringify({ type, data }));
   }
 }
@@ -53,16 +54,35 @@ function send(ws, type, data) {
  */
 function run(cmd, opts = {}) {
   return new Promise((resolve) => {
+    console.log(`[agent.run] executing: ${cmd}`);
+    if (opts.cwd) {
+      console.log(`[agent.run] cwd: ${opts.cwd}`);
+    }
+    if (opts.timeout) {
+      console.log(`[agent.run] timeoutMs: ${opts.timeout}`);
+    }
+
     exec(cmd, { timeout: opts.timeout || 30_000, maxBuffer: 2 * 1024 * 1024, cwd: opts.cwd }, (err, stdout, stderr) => {
-      resolve({
+      const result = {
         success: !err,
         stdout: (stdout || "").trim(),
         stderr: (stderr || "").trim(),
         exitCode: err ? (err.code || 1) : 0,
         cmd,
-      });
+      };
+
+      console.log("[agent.run] stdout:", result.stdout || "<empty>");
+      console.log("[agent.run] stderr:", result.stderr || "<empty>");
+      console.log("[agent.run] result:", result);
+
+      resolve(result);
     });
   });
+}
+
+function logResult(scope, payload) {
+  console.log(`[agent.${scope}] result:`, payload);
+  return payload;
 }
 
 // ─── Kiosk management ────────────────────────────────────────────────────────
@@ -75,17 +95,17 @@ async function handleStartKiosk(data, ws) {
     const appEntry = path.join(KIOSK_ROOT, "app", "main.js");
     result = await run(`pm2 start "${appEntry}" --name "${KIOSK_PM2_NAME}"`);
   }
-  send(ws, "kiosk-command-result", { command: "start-kiosk", ...result });
+  send(ws, "kiosk-command-result", logResult("handleStartKiosk", { command: "start-kiosk", ...result }));
 }
 
 async function handleStopKiosk(data, ws) {
   console.log("⏹  Stopping kiosk…");
-  send(ws, "kiosk-command-result", { command: "stop-kiosk", ...await run(`pm2 stop ${KIOSK_PM2_NAME}`) });
+  send(ws, "kiosk-command-result", logResult("handleStopKiosk", { command: "stop-kiosk", ...await run(`pm2 stop ${KIOSK_PM2_NAME}`) }));
 }
 
 async function handleRestartKiosk(data, ws) {
   console.log("🔄  Restarting kiosk…");
-  send(ws, "kiosk-command-result", { command: "restart-kiosk", ...await run(`pm2 restart ${KIOSK_PM2_NAME}`) });
+  send(ws, "kiosk-command-result", logResult("handleRestartKiosk", { command: "restart-kiosk", ...await run(`pm2 restart ${KIOSK_PM2_NAME}`) }));
 }
 
 async function handleKioskStatus(data, ws) {
@@ -106,38 +126,38 @@ async function handleKioskStatus(data, ws) {
       }));
     } catch { processes = result.stdout; }
   }
-  send(ws, "kiosk-status-result", { command: "kiosk-status", success: result.success, processes, stderr: result.stderr });
+  send(ws, "kiosk-status-result", logResult("handleKioskStatus", { command: "kiosk-status", success: result.success, processes, stderr: result.stderr }));
 }
 
 async function handlePm2Save(_data, ws) {
   console.log("💾  Saving PM2 process list…");
-  send(ws, "kiosk-command-result", { command: "pm2-save", ...await run("pm2 save") });
+  send(ws, "kiosk-command-result", logResult("handlePm2Save", { command: "pm2-save", ...await run("pm2 save") }));
 }
 
 async function handleGetLogs(data, ws) {
   const lines = data?.lines || 100;
   console.log(`📜  Fetching last ${lines} PM2 log lines…`);
-  send(ws, "logs-result", {
+  send(ws, "logs-result", logResult("handleGetLogs", {
     command: "get-logs",
     ...await run(`pm2 logs ${KIOSK_PM2_NAME} --lines ${lines} --nostream`, { timeout: 15_000 }),
-  });
+  }));
 }
 
 // ─── OS management ───────────────────────────────────────────────────────────
 
 async function handleRestartSystem(_data, ws) {
   console.log("🔁  Rebooting system…");
-  send(ws, "kiosk-command-result", { command: "restart-system", success: true, stdout: "System reboot initiated…" });
+  send(ws, "kiosk-command-result", logResult("handleRestartSystem", { command: "restart-system", success: true, stdout: "System reboot initiated…" }));
   setTimeout(() => exec("sudo reboot"), 1000);
 }
 
 async function handleUpdateSystem(_data, ws) {
   console.log("⬆  Updating system packages…");
-  send(ws, "kiosk-command-result", { command: "update-system-started", success: true, stdout: "apt update + upgrade started — this may take several minutes." });
-  send(ws, "kiosk-command-result", {
+  send(ws, "kiosk-command-result", logResult("handleUpdateSystem", { command: "update-system-started", success: true, stdout: "apt update + upgrade started — this may take several minutes." }));
+  send(ws, "kiosk-command-result", logResult("handleUpdateSystem", {
     command: "update-system-complete",
     ...await run("sudo apt-get update && sudo apt-get upgrade -y", { timeout: 300_000 }),
-  });
+  }));
 }
 
 async function handleUpdateKiosk(_data, ws) {
@@ -150,8 +170,8 @@ async function handleUpdateKiosk(_data, ws) {
     `cd "${agentDir}" && npm install`,
     `pm2 restart ${KIOSK_PM2_NAME}`,
   ].join(" && ");
-  send(ws, "kiosk-command-result", { command: "update-kiosk-started", success: true, stdout: "Kiosk update started…" });
-  send(ws, "kiosk-command-result", { command: "update-kiosk-complete", ...await run(cmds, { timeout: 120_000 }) });
+  send(ws, "kiosk-command-result", logResult("handleUpdateKiosk", { command: "update-kiosk-started", success: true, stdout: "Kiosk update started…" }));
+  send(ws, "kiosk-command-result", logResult("handleUpdateKiosk", { command: "update-kiosk-complete", ...await run(cmds, { timeout: 120_000 }) }));
 }
 
 // ─── System information ───────────────────────────────────────────────────────
@@ -191,7 +211,7 @@ async function handleGetSystemInfo(_data, ws) {
     info.cpuTempC = (parseInt(temp.stdout, 10) / 1000).toFixed(1);
   }
 
-  send(ws, "system-info-result", { command: "get-system-info", success: true, info });
+  send(ws, "system-info-result", logResult("handleGetSystemInfo", { command: "get-system-info", success: true, info }));
 }
 
 async function handleListProcesses(_data, ws) {
@@ -201,38 +221,38 @@ async function handleListProcesses(_data, ws) {
   if (result.success) {
     try { processes = JSON.parse(result.stdout); } catch { /* keep raw */ }
   }
-  send(ws, "process-list-result", { command: "list-processes", success: result.success, processes });
+  send(ws, "process-list-result", logResult("handleListProcesses", { command: "list-processes", success: result.success, processes }));
 }
 
 async function handleKillProcess(data, ws) {
   const pid = parseInt(data?.pid, 10);
   if (!pid || isNaN(pid)) {
-    send(ws, "execute-command-result", { command: "kill-process", success: false, stderr: "Valid pid required" });
+    send(ws, "execute-command-result", logResult("handleKillProcess", { command: "kill-process", success: false, stderr: "Valid pid required" }));
     return;
   }
   console.log(`🔪  Killing PID ${pid}…`);
-  send(ws, "execute-command-result", { command: "kill-process", pid, ...await run(`kill -9 ${pid}`) });
+  send(ws, "execute-command-result", logResult("handleKillProcess", { command: "kill-process", pid, ...await run(`kill -9 ${pid}`) }));
 }
 
 // ─── Arbitrary command execution ──────────────────────────────────────────────
 
 async function handleExecuteCommand(data, ws) {
   if (!data?.cmd) {
-    send(ws, "execute-command-result", { success: false, stderr: "No command provided" });
+    send(ws, "execute-command-result", logResult("handleExecuteCommand", { success: false, stderr: "No command provided" }));
     return;
   }
   console.log(`💻  Executing: ${data.cmd}`);
   const result = await run(data.cmd, { timeout: data.timeout || 30_000, cwd: data.cwd });
-  send(ws, "execute-command-result", { requestId: data.requestId, ...result });
+  send(ws, "execute-command-result", logResult("handleExecuteCommand", { requestId: data.requestId, ...result }));
 }
 
 // ─── Real-time PTY terminal ──────────────────────────────────────────────────
 
 function handleOpenTerminal(data, ws) {
   const sessionId = data?.sessionId;
-  if (!sessionId) { send(ws, "terminal-error", { error: "sessionId required" }); return; }
-  if (!pty) { send(ws, "terminal-error", { sessionId, error: "node-pty not available on this agent" }); return; }
-  if (ptySessions[sessionId]) { send(ws, "terminal-error", { sessionId, error: "Session already exists" }); return; }
+  if (!sessionId) { send(ws, "terminal-error", logResult("handleOpenTerminal", { error: "sessionId required" })); return; }
+  if (!pty) { send(ws, "terminal-error", logResult("handleOpenTerminal", { sessionId, error: "node-pty not available on this agent" })); return; }
+  if (ptySessions[sessionId]) { send(ws, "terminal-error", logResult("handleOpenTerminal", { sessionId, error: "Session already exists" })); return; }
 
   console.log(`🖥  Opening terminal session: ${sessionId}`);
   const shell = process.platform === "win32" ? "cmd.exe" : (process.env.SHELL || "/bin/bash");
@@ -256,36 +276,38 @@ function handleOpenTerminal(data, ws) {
     ptyProcess.onExit(({ exitCode, signal }) => {
       console.log(`🖥  Terminal ${sessionId} exited (code=${exitCode})`);
       delete ptySessions[sessionId];
-      send(ws, "terminal-closed", { sessionId, exitCode, signal });
+      send(ws, "terminal-closed", logResult("handleOpenTerminal", { sessionId, exitCode, signal }));
     });
 
-    send(ws, "terminal-opened", { sessionId, shell, cols: data?.cols || 80, rows: data?.rows || 24 });
+    send(ws, "terminal-opened", logResult("handleOpenTerminal", { sessionId, shell, cols: data?.cols || 80, rows: data?.rows || 24 }));
   } catch (err) {
     console.error("❌  PTY spawn failed:", err.message);
-    send(ws, "terminal-error", { sessionId, error: err.message });
+    send(ws, "terminal-error", logResult("handleOpenTerminal", { sessionId, error: err.message }));
   }
 }
 
 function handleTerminalInput(data, ws) {
   const session = ptySessions[data?.sessionId];
-  if (!session) { send(ws, "terminal-error", { sessionId: data?.sessionId, error: "Session not found" }); return; }
+  if (!session) { send(ws, "terminal-error", logResult("handleTerminalInput", { sessionId: data?.sessionId, error: "Session not found" })); return; }
+  console.log("[agent.handleTerminalInput] input:", { sessionId: data?.sessionId, data: data.data ?? "" });
   session.ptyProcess.write(data.data ?? "");
 }
 
 function handleTerminalResize(data, ws) {
   const session = ptySessions[data?.sessionId];
   if (!session || !data?.cols || !data?.rows) return;
+  console.log("[agent.handleTerminalResize] resize:", { sessionId: data?.sessionId, cols: data.cols, rows: data.rows });
   try { session.ptyProcess.resize(data.cols, data.rows); } catch { /* ignore */ }
 }
 
 function handleCloseTerminal(data, ws) {
   const sessionId = data?.sessionId;
   const session = ptySessions[sessionId];
-  if (!session) { send(ws, "terminal-error", { sessionId, error: "Session not found" }); return; }
+  if (!session) { send(ws, "terminal-error", logResult("handleCloseTerminal", { sessionId, error: "Session not found" })); return; }
   console.log(`🖥  Closing terminal session: ${sessionId}`);
   session.ptyProcess.kill();
   delete ptySessions[sessionId];
-  send(ws, "terminal-closed", { sessionId, reason: "closed-by-admin" });
+  send(ws, "terminal-closed", logResult("handleCloseTerminal", { sessionId, reason: "closed-by-admin" }));
 }
 
 // Kill all open PTY sessions (called on disconnect)

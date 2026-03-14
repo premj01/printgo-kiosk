@@ -19,9 +19,8 @@ const {
     resumePrinter,
     getPrintHistory,
 } = require("./printer");
-const { default: sleepUtil } = require("../util/sleep.util");
+const sleepUtil = require("../util/sleep.util");
 const { THEME } = require("../themes/theme");
-const { resetUserIdKiosk } = require("./ipc-handlers");
 
 let socket = null;
 let UniqueKisokIDForIndividual = "";
@@ -293,7 +292,8 @@ function connectSocket() {
                 break;
             case "user-disconnected":
                 safeSend("set-state", { color: THEME.dotOffline, msg: "NOT CONNECTED" })
-                resetUserIdKiosk("Reset req : User disconnected");
+                // Lazy require avoids circular dependency with ipc-handlers.
+                require("./ipc-handlers").resetUserIdKiosk("Reset req : User disconnected");
                 break;
 
             case "print-file-request-from-user-via-server": {
