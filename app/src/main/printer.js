@@ -150,13 +150,29 @@ async function printFile(fileName, options = {}) {
     // Merge with defaults
     const opts = { ...DEFAULT_PRINT_OPTIONS, ...options };
 
+    // If no explicit printer is provided by server, use default printer.
+    // If the system has no default destination configured, fallback to
+    // first available accepted printer to avoid lp "No default destination".
+    let resolvedPrinter = opts.printer || (await getDefaultPrinterName());
+    if (!resolvedPrinter) {
+        resolvedPrinter = await getFirstAvailablePrinterName();
+        if (resolvedPrinter) {
+            console.log(`[printFile] no default destination; using fallback printer: ${resolvedPrinter}`);
+        }
+    }
+
+    if (!resolvedPrinter) {
+        const msg = "No printer available to print (default and fallback missing)";
+        console.error(msg);
+        safeSend("status", { text: msg });
+        return logReturn("printFile", { success: false, jobId: null, error: msg });
+    }
+
     // Build the `lp` command
     const args = [];
 
     // printer destination
-    if (opts.printer) {
-        args.push("-d", opts.printer);
-    }
+    args.push("-d", resolvedPrinter);
 
     // number of copies
     args.push("-n", String(opts.copies));
@@ -372,6 +388,24 @@ async function getDefaultPrinterName() {
         return logReturn("getDefaultPrinterName", match ? match[1] : null);
     } catch {
         return logReturn("getDefaultPrinterName", null);
+    }
+}
+
+/**
+ * Get first available accepted CUPS printer.
+ */
+async function getFirstAvailablePrinterName() {
+    try {
+        const raw = await run("lpstat -a 2>/dev/null || echo ''");
+        for (const line of raw.split("\n")) {
+            const match = line.match(/^(\S+)\s+accepting/);
+            if (match) {
+                return logReturn("getFirstAvailablePrinterName", match[1]);
+            }
+        }
+        return logReturn("getFirstAvailablePrinterName", null);
+    } catch {
+        return logReturn("getFirstAvailablePrinterName", null);
     }
 }
 

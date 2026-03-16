@@ -327,8 +327,12 @@ function connectSocket() {
                         ...result,
                     });
 
-                    // Cleanup uploaded file after printing
-                    cleanUploads();
+                    // Keep failed files for retry/debugging; clean only after success.
+                    if (result.success) {
+                        cleanUploads();
+                    } else {
+                        console.log("Print failed; keeping uploaded file for inspection/retry");
+                    }
                 });
                 break;
             }
