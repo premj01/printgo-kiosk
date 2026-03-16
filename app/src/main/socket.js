@@ -124,9 +124,11 @@ function connectSocket() {
 
                     console.log("File saved:", transfer.fileName);
 
-                    sendEvent("ack-after-file-sent", {
+                    sendEvent("ack-of-file-from-kiosk", {
                         kioskId: kioskNativeResources.kioksid,
-                        sessionId: transfer.sessionId
+                        sessionId: transfer.sessionId,
+                        fileName: transfer.fileName,
+                        savedPath: path.join(UPLOAD_DIR, transfer.fileName),
                     });
                 });
             }
@@ -256,16 +258,7 @@ function connectSocket() {
                 break;
 
             case "ack-after-file-sent":
-
-                // Do not bind this ACK to current UI session id. A user can reset
-                // immediately after upload, but backend still expects transfer ACK.
-                if (data?.kioskId === kioskNativeResources.kioksid && data?.sessionId) {
-                    sendEvent("ack-of-file-from-kiosk", {
-                        ack: true,
-                        sessionId: data.sessionId
-                    });
-                }
-
+                console.log("Ignoring legacy ack-after-file-sent event", data);
                 break;
 
             case "status-user-connected-to-kiosk":
