@@ -29,7 +29,7 @@ const resetUserIdKiosk = (from = "Unknown") => {
 
         }, 3000)
 
-        // // testing code .. no matters 
+        // testing code .. no matters 
         // sendEvent("testing-file-request-from-kiosk", {
         //     msg: `file send request on button click`
         // });

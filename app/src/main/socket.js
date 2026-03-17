@@ -1,6 +1,8 @@
 const WebSocket = require("ws");
 const fs = require("fs");
 const path = require("path");
+const http = require("http");
+const https = require("https");
 const kioskNativeResources = require('../../../resources.json');
 const { RECONNECT_DELAY } = require("../config/constants");
 const { safeSend } = require("./window");
@@ -77,6 +79,43 @@ function handleNonJsonMessage(rawMessage) {
     console.log("Unknown plain message:", message);
 }
 
+function downloadFileFromSignedUrl(downloadUrl, targetPath) {
+    return new Promise((resolve, reject) => {
+        const client = downloadUrl.startsWith("https://") ? https : http;
+
+        fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+        const fileStream = fs.createWriteStream(targetPath, { flags: "w" });
+
+        const request = client.get(downloadUrl, (response) => {
+            if (response.statusCode && response.statusCode >= 400) {
+                fileStream.close();
+                fs.unlink(targetPath, () => { });
+                reject(new Error(`Failed to download file, status ${response.statusCode}`));
+                return;
+            }
+
+            response.pipe(fileStream);
+
+            fileStream.on("finish", () => {
+                fileStream.close(() => resolve(targetPath));
+            });
+        });
+
+        request.on("error", (err) => {
+            fileStream.close();
+            fs.unlink(targetPath, () => { });
+            reject(err);
+        });
+
+        fileStream.on("error", (err) => {
+            request.destroy();
+            fileStream.close();
+            fs.unlink(targetPath, () => { });
+            reject(err);
+        });
+    });
+}
+
 function connectSocket() {
 
     const SERVER_URL =
@@ -124,11 +163,9 @@ function connectSocket() {
 
                     console.log("File saved:", transfer.fileName);
 
-                    sendEvent("ack-of-file-from-kiosk", {
+                    sendEvent("ack-after-file-sent", {
                         kioskId: kioskNativeResources.kioksid,
-                        sessionId: transfer.sessionId,
-                        fileName: transfer.fileName,
-                        savedPath: path.join(UPLOAD_DIR, transfer.fileName),
+                        sessionId: transfer.sessionId
                     });
                 });
             }
@@ -258,7 +295,16 @@ function connectSocket() {
                 break;
 
             case "ack-after-file-sent":
-                console.log("Ignoring legacy ack-after-file-sent event", data);
+
+                // Do not bind this ACK to current UI session id. A user can reset
+                // immediately after upload, but backend still expects transfer ACK.
+                if (data?.kioskId === kioskNativeResources.kioksid && data?.sessionId) {
+                    sendEvent("ack-of-file-from-kiosk", {
+                        ack: true,
+                        sessionId: data.sessionId
+                    });
+                }
+
                 break;
 
             case "status-user-connected-to-kiosk":
@@ -327,13 +373,70 @@ function connectSocket() {
                         ...result,
                     });
 
-                    // Keep failed files for retry/debugging; clean only after success.
-                    if (result.success) {
-                        cleanUploads();
-                    } else {
-                        console.log("Print failed; keeping uploaded file for inspection/retry");
-                    }
+                    // Cleanup uploaded file after printing
+                    cleanUploads();
                 });
+                break;
+            }
+
+            case "download-file-from-s3-request": {
+                const fileKey = data?.fileKey ?? null;
+                const fileNameFromServer = data?.fileName ?? null;
+                const downloadUrl = data?.downloadUrl ?? null;
+                const sessionId = data?.sessionId ?? null;
+
+                if (!fileKey || !downloadUrl || !sessionId) {
+                    sendEvent("download-file-from-s3-ack", {
+                        kioskId: kioskNativeResources.kioksid,
+                        sessionId,
+                        fileKey,
+                        fileName: fileNameFromServer,
+                        success: false,
+                        error: "Missing required fields",
+                    });
+                    break;
+                }
+
+                if (UniqueKisokIDForIndividual !== sessionId) {
+                    sendEvent("download-file-from-s3-ack", {
+                        kioskId: kioskNativeResources.kioksid,
+                        sessionId,
+                        fileKey,
+                        fileName: fileNameFromServer,
+                        success: false,
+                        error: "Session mismatch on kiosk",
+                    });
+                    break;
+                }
+
+                const safeFileName = path.basename(fileNameFromServer || `${Date.now()}.pdf`);
+                const targetPath = path.join(UPLOAD_DIR, safeFileName);
+
+                safeSend("status", { text: "Downloading file from secure storage..." });
+
+                downloadFileFromSignedUrl(downloadUrl, targetPath)
+                    .then(() => {
+                        safeSend("status", { text: "File downloaded successfully" });
+                        sendEvent("download-file-from-s3-ack", {
+                            kioskId: kioskNativeResources.kioksid,
+                            sessionId,
+                            fileKey,
+                            fileName: safeFileName,
+                            success: true,
+                        });
+                    })
+                    .catch((err) => {
+                        safeSend("status", { text: `Download failed: ${err.message}` });
+                        sendEvent("download-file-from-s3-ack", {
+                            kioskId: kioskNativeResources.kioksid,
+                            sessionId,
+                            fileKey,
+                            fileName: safeFileName,
+                            success: false,
+                            error: err.message,
+                        });
+                    });
+
                 break;
             }
 

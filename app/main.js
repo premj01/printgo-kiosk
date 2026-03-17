@@ -6,6 +6,8 @@ const kioskNativeResources = require('../resources.json')
 const WebSocket = require("ws");
 const { log } = require("console");
 const fs = require("fs");
+const http = require("http");
+const https = require("https");
 
 let win;
 let UniqueKisokIDForIndividual;
@@ -39,6 +41,38 @@ let videoURLs = {
 // reconnect settings
 
 const RECONNECT_DELAY = 2000;
+
+function downloadFileFromSignedUrl(downloadUrl, targetPath) {
+  return new Promise((resolve, reject) => {
+    const client = downloadUrl.startsWith("https://") ? https : http;
+    const fileStream = fs.createWriteStream(targetPath, { flags: "w" });
+
+    const request = client.get(downloadUrl, (response) => {
+      if (response.statusCode && response.statusCode >= 400) {
+        fileStream.close();
+        fs.unlink(targetPath, () => { });
+        reject(new Error(`Failed to download file, status ${response.statusCode}`));
+        return;
+      }
+
+      response.pipe(fileStream);
+      fileStream.on("finish", () => fileStream.close(() => resolve(targetPath)));
+    });
+
+    request.on("error", (err) => {
+      fileStream.close();
+      fs.unlink(targetPath, () => { });
+      reject(err);
+    });
+
+    fileStream.on("error", (err) => {
+      request.destroy();
+      fileStream.close();
+      fs.unlink(targetPath, () => { });
+      reject(err);
+    });
+  });
+}
 
 function connectSocket() {
   const SERVER_URL = `${kioskNativeResources.socketMethod}://${kioskNativeResources.SERVER_URL}?role=kiosk&kioskid=${kioskNativeResources.kioksid}`;
@@ -97,6 +131,51 @@ function connectSocket() {
           safeSend('status', { text: `Thank you ${data.userName} for choosing us 😊` });
           safeSend('SetQRCode', { img: true });
           break;
+
+        case "download-file-from-s3-request": {
+          const fileKey = data?.fileKey ?? null;
+          const sessionId = data?.sessionId ?? null;
+          const fileName = path.basename(data?.fileName ?? `${Date.now()}.pdf`);
+          const downloadUrl = data?.downloadUrl ?? null;
+          const targetPath = path.join(__dirname, "uploads", fileName);
+
+          if (!fileKey || !sessionId || !downloadUrl) {
+            sendEvent("download-file-from-s3-ack", {
+              kioskId: kioskNativeResources.kioksid,
+              sessionId,
+              fileKey,
+              fileName,
+              success: false,
+              error: "Missing fields in download request",
+            });
+            break;
+          }
+
+          fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+
+          downloadFileFromSignedUrl(downloadUrl, targetPath)
+            .then(() => {
+              sendEvent("download-file-from-s3-ack", {
+                kioskId: kioskNativeResources.kioksid,
+                sessionId,
+                fileKey,
+                fileName,
+                success: true,
+              });
+            })
+            .catch((err) => {
+              sendEvent("download-file-from-s3-ack", {
+                kioskId: kioskNativeResources.kioksid,
+                sessionId,
+                fileKey,
+                fileName,
+                success: false,
+                error: err.message,
+              });
+            });
+
+          break;
+        }
 
         case "metadata-before-file-sending":
           if (data.userName !== undefined || data.fileName !== undefined || data.mail !== undefined || data.filePath !== undefined || data.sessionId !== undefined || data.totalChunks !== undefined) {
@@ -191,7 +270,7 @@ function createWindow() {
     // kiosk: true,       // fullscreen kiosk mode
     // frame: false,      // no window frame
     // alwaysOnTop: true,
-    
+
     autoHideMenuBar: true,
     webPreferences: {
       nodeIntegration: true,
