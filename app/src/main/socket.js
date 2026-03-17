@@ -116,6 +116,12 @@ function downloadFileFromSignedUrl(downloadUrl, targetPath) {
     });
 }
 
+function buildSessionScopedFileName(sessionId, originalFileName) {
+    const safeSessionId = String(sessionId || "unknown-session").replace(/[^a-zA-Z0-9_-]/g, "_");
+    const safeOriginal = path.basename(originalFileName || `${Date.now()}.pdf`);
+    return `${safeSessionId}__${safeOriginal}`;
+}
+
 function connectSocket() {
 
     const SERVER_URL =
@@ -409,7 +415,7 @@ function connectSocket() {
                     break;
                 }
 
-                const safeFileName = path.basename(fileNameFromServer || `${Date.now()}.pdf`);
+                const safeFileName = buildSessionScopedFileName(sessionId, fileNameFromServer);
                 const targetPath = path.join(UPLOAD_DIR, safeFileName);
 
                 safeSend("status", { text: "Downloading file from secure storage..." });
