@@ -79,18 +79,32 @@ function handleNonJsonMessage(rawMessage) {
     console.log("Unknown plain message:", message);
 }
 
-function downloadFileFromSignedUrl(downloadUrl, targetPath) {
+function downloadFileFromSignedUrl(downloadUrl, targetPath, redirects = 0) {
     return new Promise((resolve, reject) => {
+        if (redirects > 5) {
+            reject(new Error("Too many redirects while downloading file"));
+            return;
+        }
+
         const client = downloadUrl.startsWith("https://") ? https : http;
 
         fs.mkdirSync(path.dirname(targetPath), { recursive: true });
         const fileStream = fs.createWriteStream(targetPath, { flags: "w" });
 
         const request = client.get(downloadUrl, (response) => {
-            if (response.statusCode && response.statusCode >= 400) {
+            const statusCode = response.statusCode || 0;
+
+            if ([301, 302, 303, 307, 308].includes(statusCode) && response.headers?.location) {
                 fileStream.close();
                 fs.unlink(targetPath, () => { });
-                reject(new Error(`Failed to download file, status ${response.statusCode}`));
+                resolve(downloadFileFromSignedUrl(response.headers.location, targetPath, redirects + 1));
+                return;
+            }
+
+            if (statusCode >= 400) {
+                fileStream.close();
+                fs.unlink(targetPath, () => { });
+                reject(new Error(`Failed to download file, status ${statusCode}`));
                 return;
             }
 
@@ -99,6 +113,10 @@ function downloadFileFromSignedUrl(downloadUrl, targetPath) {
             fileStream.on("finish", () => {
                 fileStream.close(() => resolve(targetPath));
             });
+        });
+
+        request.setTimeout(30000, () => {
+            request.destroy(new Error("Download request timed out"));
         });
 
         request.on("error", (err) => {
@@ -403,25 +421,32 @@ function connectSocket() {
                     break;
                 }
 
-                if (UniqueKisokIDForIndividual !== sessionId) {
-                    sendEvent("download-file-from-s3-ack", {
-                        kioskId: kioskNativeResources.kioksid,
-                        sessionId,
-                        fileKey,
-                        fileName: fileNameFromServer,
-                        success: false,
-                        error: "Session mismatch on kiosk",
-                    });
-                    break;
+                if (UniqueKisokIDForIndividual && UniqueKisokIDForIndividual !== sessionId) {
+                    console.log(
+                        `Download request session mismatch (active=${UniqueKisokIDForIndividual}, incoming=${sessionId}). Proceeding with server-issued request.`
+                    );
                 }
 
                 const safeFileName = buildSessionScopedFileName(sessionId, fileNameFromServer);
                 const targetPath = path.join(UPLOAD_DIR, safeFileName);
 
+                // ── Show downloading animation on kiosk UI ──
+                safeSend("show-downloading", {
+                    title: "Downloading Your File",
+                    subtitle: "Your document is being prepared…<br>This will only take a moment",
+                    statusText: "Downloading file from secure storage...",
+                });
+
                 safeSend("status", { text: "Downloading file from secure storage..." });
 
                 downloadFileFromSignedUrl(downloadUrl, targetPath)
                     .then(() => {
+                        // ── Hide downloading animation (success) ──
+                        safeSend("hide-downloading", {
+                            success: true,
+                            statusText: "File downloaded successfully! Ready to print.",
+                        });
+
                         safeSend("status", { text: "File downloaded successfully" });
                         sendEvent("download-file-from-s3-ack", {
                             kioskId: kioskNativeResources.kioksid,
@@ -432,6 +457,12 @@ function connectSocket() {
                         });
                     })
                     .catch((err) => {
+                        // ── Hide downloading animation (failure) ──
+                        safeSend("hide-downloading", {
+                            success: false,
+                            statusText: `Download failed: ${err.message}`,
+                        });
+
                         safeSend("status", { text: `Download failed: ${err.message}` });
                         sendEvent("download-file-from-s3-ack", {
                             kioskId: kioskNativeResources.kioksid,

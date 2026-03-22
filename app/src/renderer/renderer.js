@@ -27,9 +27,12 @@ const status = document.getElementById("status");
 const resetButton = document.getElementById("resetButton");
 const ActionImg = document.getElementById("imagetoshow");
 const qrContainer = document.getElementById("qr");
-
 const upperText = document.getElementById("upper-text");
 
+// Download overlay elements
+const downloadOverlay = document.getElementById("download-overlay");
+const downloadTitle = document.getElementById("download-title");
+const downloadSubtitle = document.getElementById("download-subtitle");
 
 // -----------------------------------------------------------------------
 const flagDot = document.getElementById("flag-dot");
@@ -90,4 +93,37 @@ ipcRenderer.on("set-timeout-warning", (event, obj) => {
 })
 ipcRenderer.on("set-state", (event, obj) => {
     setState(obj.color, obj.msg);
+})
+
+// ── Download overlay IPC handlers ──
+
+ipcRenderer.on("show-downloading", (event, data) => {
+    // Hide QR code and image, show download overlay
+    qrContainer.style.display = "none";
+    ActionImg.style.display = "none";
+    downloadOverlay.classList.add("active");
+
+    // Update text if provided
+    if (data?.title) downloadTitle.innerText = data.title;
+    if (data?.subtitle) downloadSubtitle.innerHTML = data.subtitle;
+
+    status.innerText = data?.statusText || "Downloading file from secure storage...";
+    console.log("📥 Download overlay shown");
+})
+
+ipcRenderer.on("hide-downloading", (event, data) => {
+    // Hide download overlay
+    downloadOverlay.classList.remove("active");
+
+    const success = data?.success !== false;
+
+    if (success) {
+        downloadTitle.innerText = "Downloading Your File";
+        downloadSubtitle.innerHTML = "Your document is being prepared…<br>This will only take a moment";
+        status.innerText = data?.statusText || "File ready! Waiting for print command...";
+    } else {
+        status.innerText = data?.statusText || "Download failed. Please try again.";
+    }
+
+    console.log(`📥 Download overlay hidden (success: ${success})`);
 })

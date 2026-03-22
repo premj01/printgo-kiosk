@@ -189,6 +189,94 @@
         }
       }
 
+      /* ── DOWNLOADING OVERLAY ── */
+      #download-overlay {
+        display: none;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 18px;
+        padding: 30px 20px;
+      }
+
+      #download-overlay.active {
+        display: flex;
+      }
+
+      .download-icon-ring {
+        width: 100px;
+        height: 100px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        animation: downloadPulse 1.8s ease-in-out infinite;
+        box-shadow: 0 8px 32px rgba(102, 126, 234, 0.35);
+      }
+
+      .download-icon-ring svg {
+        width: 44px;
+        height: 44px;
+        fill: none;
+        stroke: white;
+        stroke-width: 2.5;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        animation: downloadBounce 1.8s ease-in-out infinite;
+      }
+
+      @keyframes downloadPulse {
+        0%, 100% { transform: scale(1); box-shadow: 0 8px 32px rgba(102, 126, 234, 0.35); }
+        50% { transform: scale(1.08); box-shadow: 0 12px 48px rgba(102, 126, 234, 0.5); }
+      }
+
+      @keyframes downloadBounce {
+        0%, 100% { transform: translateY(0); }
+        50% { transform: translateY(4px); }
+      }
+
+      #download-title {
+        font-size: 20px;
+        font-weight: 700;
+        color: #333;
+        margin: 0;
+      }
+
+      #download-subtitle {
+        font-size: 14px;
+        color: #777;
+        margin: 0;
+        text-align: center;
+        line-height: 1.5;
+      }
+
+      .download-progress-bar {
+        width: 220px;
+        height: 6px;
+        border-radius: 8px;
+        background: #e5e7ef;
+        overflow: hidden;
+        position: relative;
+      }
+
+      .download-progress-bar::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: -40%;
+        width: 40%;
+        height: 100%;
+        border-radius: 8px;
+        background: linear-gradient(90deg, #667eea, #764ba2);
+        animation: progressSlide 1.4s ease-in-out infinite;
+      }
+
+      @keyframes progressSlide {
+        0% { left: -40%; }
+        100% { left: 100%; }
+      }
+
       /* RIGHT — ADS */
       .ads-box h2 {
         margin: 0 0 10px;
@@ -254,6 +342,20 @@
         <canvas id="qr"></canvas>
 
         <img id="imagetoshow" height="260" />
+
+        <!-- Download overlay — replaces QR during file download -->
+        <div id="download-overlay">
+          <div class="download-icon-ring">
+            <svg viewBox="0 0 24 24">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="7 10 12 15 17 10"></polyline>
+              <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+          </div>
+          <p id="download-title">Downloading Your File</p>
+          <div class="download-progress-bar"></div>
+          <p id="download-subtitle">Your document is being prepared…<br>This will only take a moment</p>
+        </div>
 
         <h1 id="status">Loading…</h1>
       </div>
