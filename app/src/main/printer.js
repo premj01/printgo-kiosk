@@ -150,19 +150,12 @@ async function printFile(fileName, options = {}) {
     // Merge with defaults
     const opts = { ...DEFAULT_PRINT_OPTIONS, ...options };
 
-    // If no explicit printer is provided by server, use default printer.
-    // If the system has no default destination configured, fallback to
-    // first available accepted printer to avoid lp "No default destination".
-    let resolvedPrinter = opts.printer || (await getDefaultPrinterName());
-    if (!resolvedPrinter) {
-        resolvedPrinter = await getFirstAvailablePrinterName();
-        if (resolvedPrinter) {
-            console.log(`[printFile] no default destination; using fallback printer: ${resolvedPrinter}`);
-        }
-    }
+    // Admin manually sets the precise printer to use via the MongoDB configurations,
+    // which the server then forwards here.
+    const resolvedPrinter = opts.printer;
 
     if (!resolvedPrinter) {
-        const msg = "No printer available to print (default and fallback missing)";
+        const msg = "No explicit printer configured securely by Admin for this PrintGo Kiosk.";
         console.error(msg);
         safeSend("status", { text: msg });
         return logReturn("printFile", { success: false, jobId: null, error: msg });
@@ -208,6 +201,8 @@ async function printFile(fileName, options = {}) {
     // color mode
     if (opts.colorMode === "monochrome") {
         lpOptions.push("ColorModel=Gray");
+    } else if (opts.colorMode === "color") {
+        lpOptions.push("print-color-mode=color");
     }
 
     for (const o of lpOptions) {
@@ -223,13 +218,15 @@ async function printFile(fileName, options = {}) {
     safeSend("status", { text: "Printing Started.." });
 
     try {
-        const stdout = await run(cmd);
+        const stdout = await new Promise((resolve, reject) => {
+            execFile("lp", args, { env: { ...process.env, LC_ALL: "C" } }, (error, output) => error ? reject(error) : resolve(output));
+        });
         // `lp` outputs something like: "request id is MyPrinter-42 (1 file(s))"
         const match = stdout.match(/request id is (\S+)/);
         const jobId = match ? match[1] : null;
 
         console.log("Printed successfully!", stdout);
-        safeSend("status", { text: "Printed Successfully 🎉" });
+        safeSend("status", { text: opts.trackCompletion ? "Print section queued" : "Printed Successfully 🎉" });
 
         return logReturn("printFile", { success: true, jobId, error: null });
     } catch (err) {

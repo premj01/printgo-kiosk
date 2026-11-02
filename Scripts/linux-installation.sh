@@ -50,6 +50,7 @@ apt-get install -y \
 echo "[3/8] Installing CUPS printer stack..."
 apt-get install -y \
   cups \
+  cups-ipp-utils \
   cups-client \
   cups-bsd \
   printer-driver-all

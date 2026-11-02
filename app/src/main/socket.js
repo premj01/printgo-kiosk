@@ -12,7 +12,6 @@ const {
     getPrinterList: fetchPrinterList,
     cancelPrinting,
     resetPrinterSettings,
-    cleanUploads,
     getJobQueue,
     setDefaultPrinter,
     testPrint,
@@ -28,6 +27,13 @@ let socket = null;
 let UniqueKisokIDForIndividual = "";
 let printDetails = null;
 const UPLOAD_DIR = path.resolve(process.cwd(), "uploads");
+const sectionPrinter = require("./sectionPrinter").createSectionPrinter({ uploads: UPLOAD_DIR, printFile, send: sendEvent,
+    onFinished(job) {
+        const text = job.results.map(part => (part.mode === "bw" ? "Black and white" : "Color") + ": " + part.status).join(" · ");
+        safeSend("status", { text });
+        setPrinterStatus(job.results.every(part => part.status === "completed") ? "idle" : "error");
+    } });
+setInterval(() => sectionPrinter.retry(), 10000).unref();
 let hasWarnedChunkWithoutMetadata = false;
 let printerInformation = {
 
@@ -151,6 +157,7 @@ function connectSocket() {
 
     socket.on("open", () => {
         console.log("Connected to server");
+        sectionPrinter.resume();
         safeSend('status', { text: "Connected to server" });
     });
 
@@ -359,6 +366,13 @@ function connectSocket() {
                 require("./ipc-handlers").resetUserIdKiosk("Reset req : User disconnected");
                 break;
 
+            case "print-sections":
+                setPrinterStatus("printing");
+                sectionPrinter.receive(data);
+                break;
+            case "print-section-ack":
+                sectionPrinter.acknowledge(data);
+                break;
             case "print-file-request-from-user-via-server": {
                 // Initiate printing with options from server (copies, printer, orientation, etc.)
                 const printOpts = {
@@ -398,14 +412,13 @@ function connectSocket() {
                     });
 
                     // Cleanup uploaded file after printing
-                    cleanUploads();
+                    if (fileName) fs.rmSync(path.join(UPLOAD_DIR, path.basename(fileName)), { force: true });
                 });
                 break;
             }
 
             case "download-file-from-s3-request": {
                 const fileKey = data?.fileKey ?? null;
-                const fileNameFromServer = data?.fileName ?? null;
                 const downloadUrl = data?.downloadUrl ?? null;
                 const sessionId = data?.sessionId ?? null;
 
@@ -414,7 +427,7 @@ function connectSocket() {
                         kioskId: kioskNativeResources.kioksid,
                         sessionId,
                         fileKey,
-                        fileName: fileNameFromServer,
+                        fileName: data?.fileName ?? null,
                         success: false,
                         error: "Missing required fields",
                     });
@@ -427,7 +440,7 @@ function connectSocket() {
                     );
                 }
 
-                const safeFileName = buildSessionScopedFileName(sessionId, fileNameFromServer);
+                const safeFileName = buildSessionScopedFileName(sessionId, path.basename(fileKey));
                 const targetPath = path.join(UPLOAD_DIR, safeFileName);
 
                 // ── Show downloading animation on kiosk UI ──
@@ -453,6 +466,7 @@ function connectSocket() {
                             sessionId,
                             fileKey,
                             fileName: safeFileName,
+                            supportsSections: true,
                             success: true,
                         });
                     })
@@ -500,9 +514,15 @@ function connectSocket() {
             }
 
             case "cancle-printing-request-from-server": {
+                if (sectionPrinter.active().length) {
+                    const results = await sectionPrinter.cancel(data?.printer, cancelPrinting);
+                    sendEvent("cancle-printing-response-to-server", { success: results.every(r => r.success), results });
+                    break;
+                }
                 const jobId = printerInformation?.currentJob?.jobId ?? null;
                 const targetPrinter = data?.printer ?? null;
 
+                const cancelledFile = printerInformation?.currentJob?.fileName;
                 cancelPrinting(jobId, targetPrinter).then((result) => {
                     if (result.success) {
                         printerInformation.currentJob = null;
@@ -512,7 +532,7 @@ function connectSocket() {
                         kioskId: kioskNativeResources.kioksid,
                         ...result,
                     });
-                    cleanUploads();
+                    if (result.success && cancelledFile) fs.rmSync(path.join(UPLOAD_DIR, path.basename(cancelledFile)), { force: true });
                 });
                 break;
             }
