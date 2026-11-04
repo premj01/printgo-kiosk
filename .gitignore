@@ -1,1 +1,4 @@
 resources.json
+.env
+.env.*
+!.env.example
