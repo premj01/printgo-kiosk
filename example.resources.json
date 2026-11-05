@@ -1,11 +1,11 @@
 {
-  "socketMethod": "ws",
-  "httpMethod": "http",
-  "SERVER_URL": "localhost:3000",
-  "AppURL": "localhost:5173",
-  "kioskName": "Kiosk-01",
-  "kioksid": "KIOSK001",
+  "socketMethod": "wss",
+  "httpMethod": "https",
+  "SERVER_URL_1": "10.94.13.90:3000",
+  "SERVER_URL": "printgo-cnf0.onrender.com",
+  "AppURL_1": "10.94.13.90:5173",
+  "AppURL": "print-go-topaz.vercel.app",
+  "kioskName": "Kiosk-02",
+  "kioksid": "KIOSK002",
   "kioskPM2Name": "kiosk-app"
 }
-
-
