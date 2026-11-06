@@ -4,7 +4,7 @@
 #   color         - color capable, RGB by default
 # Jobs are saved as PDFs by CUPS-PDF; no physical printer is needed.
 #
-# Run as prem (your normal desktop user), WITHOUT sudo:
+# Run as your current normal desktop user (mint, prem, etc.), WITHOUT sudo:
 #   bash Scripts/dummyprinter.sh
 # Or, after downloading just this file:
 #   bash dummyprinter.sh

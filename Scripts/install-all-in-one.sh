@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
 # PrintGo: one-file installer for a Debian/Ubuntu desktop VM (64-bit x86/ARM).
 #
-# RUN AS YOUR NORMAL LOGIN USER (log in as prem first), WITHOUT sudo:
+# RUN AS YOUR CURRENT NORMAL LOGIN USER (mint, prem, etc.), WITHOUT sudo:
 #   bash install-all-in-one.sh
 # Or, if you already have the repository:
 #   bash Scripts/install-all-in-one.sh
 # Do not use "sudo bash ...", "sudo npm ...", or "sudo node ...".
 # This script asks for your sudo password ONLY for system packages, CUPS,
 # ownership repair of this installation, and Electron's sandbox helper.
-# A root shell is deliberately rejected; use `exit` to return to prem first.
+# Your username and home directory are detected automatically; no edits needed.
+# A root shell is rejected; use `exit` to return to your normal user first.
 #
 # Installs to ~/printgo-kiosk; Node/npm/PM2 and caches go under
 # ~/.local/share/printgo. Requires internet, sudo access, and an existing
@@ -31,7 +32,7 @@ trap 'printf "\nInstallation stopped at line %s. Fix the error above, then rerun
 die() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 step() { printf '\n==> %s\n' "$*"; }
 
-[[ "$EUID" -ne 0 ]] || die 'Run WITHOUT sudo, from prem (or your normal desktop user): bash install-all-in-one.sh'
+[[ "$EUID" -ne 0 ]] || die 'Run WITHOUT sudo, from your current normal desktop user: bash install-all-in-one.sh'
 [[ "$(uname -s)" == Linux ]] || die 'This installer is for Linux.'
 command -v apt-get >/dev/null || die 'This installer requires Debian/Ubuntu with apt-get.'
 command -v sudo >/dev/null || die 'Your administrator must install sudo and grant your normal user sudo access first.'
